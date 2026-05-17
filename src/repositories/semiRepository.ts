@@ -18,19 +18,58 @@ export function createInitialSemiAppState(): SemiAppState {
       },
     ],
     salaryEntries: [],
+    expectedSalaries: {
+      '15th': 6800,
+      '30th': 6800,
+    },
     budgetTemplates: defaultBudgetTemplates,
     salaryAllocations: [],
     moneyMovements: [],
+    payables: [],
+    installments: [],
     settings: {
       currency: 'PHP',
       lockOnBackground: true,
-      autoLockMinutes: 0,
+      autoLockMinutes: 1,
+      biometricUnlockEnabled: false,
+      hasSeenOnboarding: false,
+      hasSeenFeatureTour: false,
+    },
+  };
+}
+
+export function normalizeSemiAppState(
+  storedState: Partial<SemiAppState> | null | undefined
+): SemiAppState {
+  const initialState = createInitialSemiAppState();
+
+  if (!storedState) {
+    return initialState;
+  }
+
+  return {
+    wallets: storedState.wallets ?? initialState.wallets,
+    salaryEntries: storedState.salaryEntries ?? initialState.salaryEntries,
+    expectedSalaries: storedState.expectedSalaries ?? initialState.expectedSalaries,
+    budgetTemplates: (storedState.budgetTemplates ?? initialState.budgetTemplates).map(t => ({
+      ...t,
+      allocationType: t.allocationType ?? 'amount',
+      value: t.value ?? t.amount,
+    })),
+    salaryAllocations: storedState.salaryAllocations ?? initialState.salaryAllocations,
+    moneyMovements: storedState.moneyMovements ?? initialState.moneyMovements,
+    payables: storedState.payables ?? initialState.payables,
+    installments: storedState.installments ?? initialState.installments,
+    settings: {
+      ...initialState.settings,
+      ...storedState.settings,
     },
   };
 }
 
 export async function loadSemiAppState() {
-  return getJsonItem<SemiAppState>(SEMI_APP_STATE_KEY, createInitialSemiAppState());
+  const storedState = await getJsonItem<Partial<SemiAppState> | null>(SEMI_APP_STATE_KEY, null);
+  return normalizeSemiAppState(storedState);
 }
 
 export async function saveSemiAppState(state: SemiAppState) {

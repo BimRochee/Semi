@@ -2,7 +2,7 @@ import { calculateTotalBalance, calculateWalletSummaries } from '@/src/domain/wa
 import { useAppState } from '@/src/hooks/useAppState';
 
 export function useWallets() {
-  const { state, addWallet } = useAppState();
+  const { state, addWallet, updateWallet, deleteWallet } = useAppState();
   const walletSummaries = calculateWalletSummaries(state.wallets, state.moneyMovements);
   const totalBalance = calculateTotalBalance(state.wallets, state.moneyMovements);
 
@@ -10,5 +10,7 @@ export function useWallets() {
     walletSummaries,
     totalBalance,
     addWallet,
+    updateWallet,
+    deleteWallet,
   };
 }

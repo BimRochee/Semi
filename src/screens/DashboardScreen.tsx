@@ -1,5 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useAppState } from '@/src/hooks/useAppState';
 import { useSalary } from '@/src/hooks/useSalary';
@@ -9,9 +10,11 @@ import { formatCurrency } from '@/src/utils/formatCurrency';
 
 type DashboardScreenProps = {
   onOpenWallets: () => void;
+  onOpenBalanceReconciliation: () => void;
   onOpenAddSalary: () => void;
   onOpenBudgetTemplates: () => void;
   onOpenSecurity: () => void;
+  onOpenTransfer: () => void;
   onOpenSalary: (salaryEntryId: string) => void;
 };
 
@@ -24,22 +27,29 @@ type CycleCardProps = {
   nextLabel: string;
   statusLabel: string;
   statusFilled: boolean;
+  onPress?: () => void;
 };
 
 export function DashboardScreen({
   onOpenWallets,
+  onOpenBalanceReconciliation,
   onOpenAddSalary,
   onOpenBudgetTemplates,
   onOpenSecurity,
+  onOpenTransfer,
   onOpenSalary,
 }: DashboardScreenProps) {
-  const { state } = useAppState();
-  const { walletSummaries } = useWallets();
+  const { state, adjustAllocationAmount } = useAppState();
+  const { walletSummaries, totalBalance } = useWallets();
   const { salaryEntries } = useSalary();
+
+  const [showSettleModal, setShowSettleModal] = useState(false);
+  const [selectedAllocForDeduction, setSelectedAllocForDeduction] = useState<string | null>(null);
+  const [deductionAmountInput, setDeductionAmountInput] = useState<string>('');
 
   const now = new Date();
   const currentMonthEntries = salaryEntries.filter((entry) => {
-    const entryDate = new Date(entry.receivedAt);
+    const entryDate = new Date(entry.dateReceived);
     return (
       entryDate.getFullYear() === now.getFullYear() &&
       entryDate.getMonth() === now.getMonth()
@@ -47,187 +57,379 @@ export function DashboardScreen({
   });
   const activeSalaryEntries = currentMonthEntries.length > 0 ? currentMonthEntries : salaryEntries;
   const totalSalaryThisMonth = activeSalaryEntries.reduce((sum, entry) => sum + entry.amount, 0);
-  const totalAllocated = state.salaryAllocations.reduce((sum, allocation) => sum + allocation.amount, 0);
-  const bufferAmount = Math.max(totalSalaryThisMonth - totalAllocated, 0);
-  const savingsAmount = walletSummaries
-    .filter((wallet) => wallet.type === 'Savings Account')
-    .reduce((sum, wallet) => sum + wallet.currentBalance, 0);
+  const totalAllocatedThisMonth = state.salaryAllocations
+    .filter(alloc => activeSalaryEntries.some(entry => entry.id === alloc.salaryEntryId))
+    .reduce((sum, a) => sum + a.amount, 0);
 
   const salary15 = activeSalaryEntries
-    .filter((entry) => new Date(entry.receivedAt).getDate() <= 15)
+    .filter((entry) => entry.cycle === '15th')
     .reduce((sum, entry) => sum + entry.amount, 0);
   const salary30 = activeSalaryEntries
-    .filter((entry) => new Date(entry.receivedAt).getDate() > 15)
+    .filter((entry) => entry.cycle === '30th')
     .reduce((sum, entry) => sum + entry.amount, 0);
+  
   const cycleTotal = Math.max(totalSalaryThisMonth, 1);
   const cycle15Progress = Math.min(1, salary15 / cycleTotal);
   const cycle30Progress = Math.min(1, salary30 / cycleTotal);
 
+  const entry15 = [...activeSalaryEntries]
+    .filter(e => e.cycle === '15th')
+    .sort((a, b) => new Date(b.dateReceived).getTime() - new Date(a.dateReceived).getTime())[0];
+
+  const entry30 = [...activeSalaryEntries]
+    .filter(e => e.cycle === '30th')
+    .sort((a, b) => new Date(b.dateReceived).getTime() - new Date(a.dateReceived).getTime())[0];
+
+  const bufferAmount = totalSalaryThisMonth - totalAllocatedThisMonth;
+
+  const savingsBalance = walletSummaries
+    .filter(w => w.type === 'Savings Account' || w.name.toLowerCase().includes('savings'))
+    .reduce((sum, w) => sum + w.currentBalance, 0);
+
+  const currentMonthExpenses = state.moneyMovements.filter((m) => {
+    if (m.type !== 'expense') return false;
+    const date = new Date(m.occurredAt);
+    return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+  });
+  const totalSpentThisMonth = currentMonthExpenses.reduce((sum, m) => sum + m.amount, 0);
+
+  const actualRemaining = bufferAmount - totalSpentThisMonth;
+  const isOverBudget = actualRemaining < 0;
+  const deficit = Math.abs(actualRemaining);
+
+  const currentMonthAllocations = state.salaryAllocations.filter(alloc => 
+    activeSalaryEntries.some(entry => entry.id === alloc.salaryEntryId)
+  );
+
   const recentMovements = [...state.moneyMovements]
     .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
-    .slice(0, 2);
-
-  const savingsDelta = Math.max(savingsAmount - 2000, 0);
-  const savingsDeltaPercent = savingsAmount > 0 ? Math.round((savingsDelta / Math.max(savingsAmount, 1)) * 100) : 0;
+    .slice(0, 3);
 
   return (
+    <>
     <ScrollView contentContainerStyle={styles.content}>
-      <SectionHeader title="Semi Summary" />
-      <View style={styles.heroCard}>
-        <MaterialIcons
-          color="rgba(255,255,255,0.12)"
-          name="account-balance"
-          size={118}
-          style={styles.heroPattern}
-        />
-        <View style={styles.heroContent}>
-          <Text style={styles.heroKicker}>Total Salary This Month</Text>
-          <Text style={styles.heroValue}>{formatCurrency(totalSalaryThisMonth)}</Text>
-          <View style={styles.heroStatsRow}>
-            <HeroStat label="Allocated" value={formatCurrency(totalAllocated)} valueColor="#FFFFFF" />
-            <HeroStat label="Buffer" value={formatCurrency(bufferAmount)} valueColor="#FFFFFF" />
-            <HeroStat label="Savings" value={formatCurrency(savingsAmount)} valueColor="#C6EDC4" />
+      {/* Premium Hero Section */}
+      <View style={styles.heroSection}>
+        <View style={styles.netWorthRow}>
+          <View>
+            <Text style={styles.netWorthLabel}>TOTAL AVAILABLE MONEY</Text>
+            <Text style={styles.netWorthValue}>{formatCurrency(totalBalance)}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={styles.netWorthLabel}>TOTAL SAVINGS</Text>
+            <Text style={[styles.netWorthValue, styles.textSavingsHighlight]}>{formatCurrency(savingsBalance)}</Text>
           </View>
         </View>
-      </View>
 
-      <View style={styles.titleRow}>
-        <SectionHeader title="Salary Cycles" />
-        <Text style={styles.titleRowMeta}>Current Status</Text>
-      </View>
-      <View style={styles.cycleGrid}>
-        <CycleCard
-          accentBg="#C6EDC4"
-          accentColor="#003535"
-          amount={salary15}
-          nextLabel={`Next: ${formatNextCycleLabel(now, 15)}`}
-          progress={cycle15Progress}
-          statusFilled={cycle15Progress > 0}
-          statusLabel={cycle15Progress > 0 ? 'Allocated' : 'Pending'}
-          title="15th Salary"
-        />
-        <CycleCard
-          accentBg="#E6EEFF"
-          accentColor="#456646"
-          amount={salary30}
-          nextLabel={`Next: ${formatNextCycleLabel(now, 30)}`}
-          progress={cycle30Progress}
-          statusFilled={cycle30Progress > 0}
-          statusLabel={cycle30Progress > 0 ? 'Allocated' : 'Pending'}
-          title="30th Salary"
-        />
-      </View>
+        {/* Main Stats Card */}
+        <View style={styles.mainStatsCard}>
+          <MaterialIcons 
+            name="account-balance" 
+            size={160} 
+            color="rgba(255,255,255,0.06)" 
+            style={styles.cardWatermark} 
+          />
+          
+          <View style={styles.cardTop}>
+            <Text style={styles.cardLabelCaps}>TOTAL SALARY THIS MONTH</Text>
+            <Text style={styles.cardMainValue}>{formatCurrency(totalSalaryThisMonth)}</Text>
+          </View>
 
-      <Pressable onPress={onOpenSecurity} style={({ pressed }) => [styles.insightCard, pressed && styles.cardPressed]}>
-        <View style={styles.insightIconWrap}>
-          <MaterialIcons color="#456646" name="eco" size={24} />
-        </View>
-        <View style={styles.insightCopy}>
-          <Text style={styles.insightTitle}>Breaking the Cycle</Text>
-          <Text style={styles.insightText}>
-            {savingsDeltaPercent > 0
-              ? `${savingsDeltaPercent}% more saved compared to your base reserve.`
-              : 'Start routing part of each cycle into savings to build momentum.'}
-          </Text>
-        </View>
-        <MaterialIcons color="#456646" name="trending-up" size={28} />
-      </Pressable>
+          <View style={styles.cardDivider} />
 
-      <View style={styles.titleRow}>
-        <SectionHeader title="Wallets & Accounts" />
-        <Pressable onPress={onOpenWallets} style={({ pressed }) => [styles.inlineButton, pressed && styles.inlineButtonPressed]}>
-          <Text style={styles.inlineButtonText}>Manage</Text>
-          <MaterialIcons color="#003535" name="chevron-right" size={16} />
-        </Pressable>
-      </View>
-      <View style={styles.walletGrid}>
-        {walletSummaries.map((wallet) => (
-          <Pressable
-            key={wallet.id}
-            onPress={onOpenWallets}
-            style={({ pressed }) => [styles.walletTile, pressed && styles.cardPressed]}>
-            <View style={styles.walletTileHeader}>
-              <View style={[styles.walletIconWrap, walletIconPalette(wallet.name).background]}>
-                <MaterialIcons
-                  color={walletIconPalette(wallet.name).color}
-                  name={walletIconPalette(wallet.name).icon}
-                  size={22}
-                />
+          <View style={styles.cardBottom}>
+            <View style={styles.statsRow}>
+              <View style={styles.cardStatColumn}>
+                <Text style={styles.cardStatLabel}>Allocated (Plan)</Text>
+                <Text style={styles.cardStatValue}>{formatCurrency(totalAllocatedThisMonth)}</Text>
               </View>
-              <MaterialIcons color="#707978" name="more-vert" size={18} />
+              <View style={styles.cardStatColumn}>
+                <View style={styles.bufferLabelRow}>
+                  <Text style={[styles.cardStatLabel, { marginBottom: 0 }]}>Spent / Paid (Actual)</Text>
+                  <Pressable 
+                    onPress={() => Alert.alert('Spent / Paid', 'This represents all money that has actually left your wallets this month, including unbudgeted expenses and debt payments.')}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialIcons name="info-outline" size={14} color="#BFC8C8" />
+                  </Pressable>
+                </View>
+                <Text style={styles.cardStatValue}>{formatCurrency(totalSpentThisMonth)}</Text>
+              </View>
             </View>
-            <Text style={styles.walletTileLabel}>{wallet.name}</Text>
-            <Text style={styles.walletTileValue}>{formatCurrency(wallet.currentBalance)}</Text>
+            
+            <View style={[styles.statsRow, { marginTop: 20 }]}>
+              <View style={styles.cardStatColumn}>
+                <View style={styles.bufferLabelRow}>
+                  <Text style={[styles.cardStatLabel, { marginBottom: 0 }]}>
+                    {isOverBudget ? 'Over Budget' : 'Unassigned Funds'}
+                  </Text>
+                  <Pressable 
+                    onPress={() => Alert.alert(
+                      isOverBudget ? 'Over Budget' : 'Unassigned Funds', 
+                      isOverBudget 
+                        ? 'You have spent more on unplanned expenses and debts than you had in your unassigned funds. This means you have dipped into money that was allocated for other bills!\n\nTap the red amount below to settle this deficit.'
+                        : 'This is what you actually have left to safely assign. It is your Total Income minus your Allocations and Actual Spent. If this is 0, every peso has a job (or was already spent)!'
+                    )}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialIcons name="info-outline" size={14} color="#BFC8C8" />
+                  </Pressable>
+                </View>
+                <Pressable
+                  disabled={!isOverBudget}
+                  onPress={() => {
+                    setShowSettleModal(true);
+                    setSelectedAllocForDeduction(null);
+                  }}
+                >
+                  <Text style={[styles.cardStatValue, isOverBudget && styles.textDangerHighlight, isOverBudget && { textDecorationLine: 'underline' }]}>
+                    {isOverBudget ? `-${formatCurrency(deficit)}` : formatCurrency(actualRemaining)}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Quick Actions */}
+        <View style={styles.quickActions}>
+          <Pressable
+            onPress={onOpenTransfer}
+            style={({ pressed }) => [styles.actionBento, { backgroundColor: '#004B4B' }, pressed && styles.actionButtonPressed]}>
+            <MaterialIcons color="#B4EDEC" name="swap-horiz" size={24} />
+            <Text style={[styles.actionBentoText, { color: '#FFFFFF' }]}>Move Money</Text>
           </Pressable>
-        ))}
+
+          <Pressable
+            onPress={onOpenBalanceReconciliation}
+            style={({ pressed }) => [styles.actionBento, { backgroundColor: '#C6EDC4' }, pressed && styles.actionButtonPressed]}>
+            <MaterialIcons color="#003535" name="sync" size={24} />
+            <Text style={[styles.actionBentoText, { color: '#003535' }]}>Update Balance</Text>
+          </Pressable>
+        </View>
       </View>
 
-      <SectionHeader title="Recent Cycles" />
-      <View style={styles.activityPanel}>
-        {recentMovements.length === 0 ? (
-          <View style={styles.activityEmpty}>
-            <Text style={styles.activityEmptyTitle}>No recent ledger activity</Text>
-            <Text style={styles.activityEmptyText}>
-              Add salary, budget allocations, or wallet movements to populate this section.
-            </Text>
-            <Pressable onPress={onOpenAddSalary} style={({ pressed }) => [styles.primaryAction, pressed && styles.primaryActionPressed]}>
-              <Text style={styles.primaryActionText}>Add your first salary</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <>
-            {recentMovements.map((movement) => {
-              const isPositive =
-                movement.type === 'income' || Boolean(movement.toWalletId && !movement.fromWalletId);
-              const sourceEntry = salaryEntries.find((entry) => entry.id === movement.referenceId);
-              const rowTitle = getMovementTitle(movement.type, sourceEntry?.source);
-              const rowMeta = formatRecentTimestamp(movement.occurredAt);
+      {/* Salary Cycles Section */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Bi-Monthly Rhythm</Text>
+          <Pressable onPress={onOpenAddSalary}>
+            <MaterialIcons color="#003535" name="add-circle" size={24} />
+          </Pressable>
+        </View>
 
+        <View style={styles.cycleGrid}>
+          <CycleCard
+            accentBg="#C6EDC4"
+            accentColor="#003535"
+            amount={salary15}
+            nextLabel={formatNextCycleLabel(now, 15)}
+            progress={cycle15Progress}
+            statusLabel={cycle15Progress > 0 ? 'Allocated' : 'Pending'}
+            title="15th Salary"
+            onPress={() => entry15 && onOpenSalary(entry15.id)}
+          />
+          <CycleCard
+            accentBg="#E6EEFF"
+            accentColor="#456646"
+            amount={salary30}
+            nextLabel={formatNextCycleLabel(now, 30)}
+            progress={cycle30Progress}
+            statusLabel={cycle30Progress > 0 ? 'Allocated' : 'Pending'}
+            title="30th Salary"
+            onPress={() => entry30 && onOpenSalary(entry30.id)}
+          />
+        </View>
+      </View>
+
+      {/* Wallets Bento Section */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Connected Wallets</Text>
+          <Pressable onPress={onOpenWallets}>
+            <Text style={styles.seeAllText}>See All</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.walletScroll}>
+          {walletSummaries.map((wallet) => (
+            <Pressable key={wallet.id} style={styles.walletPremiumCard} onPress={onOpenWallets}>
+              <View style={styles.walletCardTop}>
+                <View style={[styles.walletIconBox, getWalletPalette(wallet.type).bg]}>
+                  <MaterialIcons color={getWalletPalette(wallet.type).color} name={getWalletIcon(wallet.type)} size={18} />
+                </View>
+                <Text style={styles.walletTypeText}>{wallet.type.split(' ')[0]}</Text>
+              </View>
+              <View style={styles.walletCardBottom}>
+                <Text numberOfLines={1} style={styles.walletNameText}>{wallet.name}</Text>
+                <Text style={styles.walletBalanceText}>{formatCurrency(wallet.currentBalance)}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Recent Activity Section */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recent Movements</Text>
+          <Pressable onPress={onOpenBudgetTemplates}>
+            <Text style={styles.seeAllText}>History</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.activityList}>
+          {recentMovements.length === 0 ? (
+            <Text style={styles.emptyActivityText}>No recent movements recorded.</Text>
+          ) : (
+            recentMovements.map((movement) => {
+              const isPositive = movement.type === 'income';
               return (
                 <Pressable
                   key={movement.id}
-                  onPress={() => {
-                    if (movement.referenceId) {
-                      onOpenSalary(movement.referenceId);
-                    }
-                  }}
-                  style={({ pressed }) => [
-                    styles.activityRow,
-                    pressed && movement.referenceId && styles.cardPressed,
-                  ]}>
-                  <View style={styles.activityLeft}>
-                    <View
-                      style={[
-                        styles.activityIconWrap,
-                        isPositive ? styles.activityPositiveBg : styles.activityNeutralBg,
-                      ]}>
+                  style={styles.activityItem}
+                  onPress={() => movement.referenceId && onOpenSalary(movement.referenceId)}>
+                  <View style={styles.itemLead}>
+                    <View style={[styles.activityIconBox, isPositive ? styles.bgPositive : styles.bgNeutral]}>
                       <MaterialIcons
                         color={isPositive ? '#456646' : '#404848'}
-                        name={isPositive ? 'add-task' : 'payments'}
+                        name={isPositive ? 'add-task' : 'sync-alt'}
                         size={20}
                       />
                     </View>
                     <View>
-                      <Text style={styles.activityTitle}>{rowTitle}</Text>
-                      <Text style={styles.activityMeta}>{rowMeta}</Text>
+                      <Text style={styles.activityTitleText}>{getMovementTitle(movement.type)}</Text>
+                      <Text style={styles.activityDateText}>{formatRecentTimestamp(movement.occurredAt)}</Text>
                     </View>
                   </View>
-                  <Text style={[styles.activityAmount, isPositive && styles.activityAmountPositive]}>
-                    {isPositive ? '+' : '-'}
-                    {formatCurrency(movement.amount)}
+                  <Text style={[styles.activityAmountText, isPositive && styles.textPositive]}>
+                    {isPositive ? '+' : ''}{formatCurrency(movement.amount)}
                   </Text>
                 </Pressable>
               );
-            })}
-            <View style={styles.activityFooter}>
-              <Pressable onPress={onOpenBudgetTemplates} style={({ pressed }) => [styles.historyButton, pressed && styles.inlineButtonPressed]}>
-                <Text style={styles.historyButtonText}>View All History</Text>
-              </Pressable>
-            </View>
-          </>
-        )}
+            })
+          )}
+        </View>
       </View>
     </ScrollView>
+
+    <Modal
+      visible={showSettleModal}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={() => setShowSettleModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <View style={styles.modalIconBox}>
+              {selectedAllocForDeduction ? (
+                <Pressable onPress={() => setSelectedAllocForDeduction(null)} hitSlop={10}>
+                  <MaterialIcons name="arrow-back" size={24} color="#003535" />
+                </Pressable>
+              ) : (
+                <MaterialIcons name="account-balance-wallet" size={24} color="#003535" />
+              )}
+            </View>
+            <Text style={styles.modalTitle}>
+              {selectedAllocForDeduction ? 'Adjust Allocation' : 'Settle Over Budget'}
+            </Text>
+          </View>
+          
+          {selectedAllocForDeduction ? (() => {
+            const alloc = currentMonthAllocations.find(a => a.id === selectedAllocForDeduction);
+            if (!alloc) return null;
+            return (
+              <View>
+                <Text style={styles.modalText}>
+                  Deficit remaining: <Text style={styles.textDangerHighlight}>₱{deficit}</Text>
+                  {'\n'}Available in {alloc.category}: ₱{alloc.amount}
+                </Text>
+
+                <View style={styles.inputWrapper}>
+                  <Text style={styles.inputPrefix}>₱</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    keyboardType="numeric"
+                    value={deductionAmountInput}
+                    onChangeText={setDeductionAmountInput}
+                    autoFocus
+                  />
+                </View>
+
+                <Pressable
+                  style={({ pressed }) => [styles.modalConfirmButton, pressed && { opacity: 0.8 }]}
+                  onPress={() => {
+                    const amount = parseFloat(deductionAmountInput) || 0;
+                    if (amount <= 0 || amount > alloc.amount) {
+                      Alert.alert('Invalid', 'Please enter a valid amount up to the available balance.');
+                      return;
+                    }
+                    adjustAllocationAmount(
+                      alloc.id,
+                      amount,
+                      `Settled Over Budget: Reverted ₱${amount} from ${alloc.category} to cover unbudgeted debts.`
+                    );
+                    
+                    if (amount >= deficit) {
+                      setShowSettleModal(false);
+                      Alert.alert('Settled', `Successfully deducted ₱${amount} from ${alloc.category}. Your budget is balanced!`);
+                    } else {
+                      setSelectedAllocForDeduction(null);
+                      Alert.alert('Progress', `Deducted ₱${amount}. You still have a remaining deficit.`);
+                    }
+                  }}
+                >
+                  <Text style={styles.modalConfirmText}>Deduct ₱{deductionAmountInput || '0'}</Text>
+                </Pressable>
+              </View>
+            );
+          })() : (
+            <>
+              <Text style={styles.modalText}>
+                You are currently short by <Text style={styles.textDangerHighlight}>₱{deficit}</Text>. 
+                Where would you like to pull money from to cover this deficit?
+              </Text>
+
+              <ScrollView style={styles.modalScrollArea} showsVerticalScrollIndicator={false}>
+                <View style={styles.modalOptionsGrid}>
+                  {currentMonthAllocations
+                    .filter(a => a.amount > 0)
+                    .sort((a, b) => b.amount - a.amount)
+                    .map(alloc => (
+                      <Pressable
+                        key={alloc.id}
+                        style={({ pressed }) => [styles.modalOptionButton, pressed && styles.modalOptionPressed]}
+                        onPress={() => {
+                          setSelectedAllocForDeduction(alloc.id);
+                          setDeductionAmountInput(Math.min(deficit, alloc.amount).toString());
+                        }}
+                      >
+                        <View style={styles.modalOptionLead}>
+                          <MaterialIcons color="#003535" name="swap-horiz" size={20} />
+                          <View>
+                            <Text style={styles.modalOptionTitle}>Deduct from {alloc.category}</Text>
+                            <Text style={styles.modalOptionSubtext}>Available: {formatCurrency(alloc.amount)}</Text>
+                          </View>
+                        </View>
+                        <MaterialIcons color="#BFC8C8" name="chevron-right" size={20} />
+                      </Pressable>
+                    ))}
+                </View>
+              </ScrollView>
+            </>
+          )}
+
+          <Pressable
+            style={({ pressed }) => [styles.modalCancelButton, pressed && { opacity: 0.7 }]}
+            onPress={() => setShowSettleModal(false)}
+          >
+            <Text style={styles.modalCancelText}>Cancel</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -260,55 +462,66 @@ function CycleCard({
   accentBg,
   nextLabel,
   statusLabel,
-  statusFilled,
-}: CycleCardProps) {
+  onPress,
+}: Omit<CycleCardProps, 'statusFilled'>) {
   return (
-    <View style={styles.cycleCard}>
-      <View style={styles.cycleTopRow}>
-        <View>
-          <Text style={styles.cycleKicker}>{title}</Text>
-          <Text style={[styles.cycleValue, amount <= 0 && styles.cycleValueMuted]}>
-            {formatCurrency(amount)}
-          </Text>
-        </View>
-        <View style={styles.progressBadge}>
-          <View style={[styles.progressRing, { borderColor: accentBg }]}>
+    <Pressable 
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.cycleCard,
+        pressed && styles.cycleCardPressed
+      ]}
+    >
+      <View style={styles.cycleHeader}>
+        <Text style={styles.labelCaps}>{title.toUpperCase()}</Text>
+        <View style={styles.cycleProgressRow}>
+          <View style={[styles.progressBar, { backgroundColor: accentBg }]}>
             <View
               style={[
                 styles.progressFill,
-                {
-                  width: `${Math.max(progress, 0.12) * 100}%`,
-                  backgroundColor: accentColor,
-                },
+                { width: `${progress * 100}%`, backgroundColor: accentColor },
               ]}
             />
-            <Text style={[styles.progressText, { color: accentColor }]}>
-              {Math.round(progress * 100)}%
-            </Text>
           </View>
-        </View>
-      </View>
-      <View style={styles.cycleBottomRow}>
-        <View style={styles.cycleDateRow}>
-          <MaterialIcons color="#404848" name="calendar-today" size={16} />
-          <Text style={styles.cycleDateText}>{nextLabel}</Text>
-        </View>
-        <View
-          style={[
-            styles.statusPill,
-            statusFilled ? styles.statusPillFilled : styles.statusPillPending,
-          ]}>
-          <Text
-            style={[
-              styles.statusPillText,
-              statusFilled ? styles.statusPillTextFilled : styles.statusPillTextPending,
-            ]}>
-            {statusLabel}
+          <Text style={[styles.progressPercent, { color: accentColor }]}>
+            {Math.round(progress * 100)}%
           </Text>
         </View>
       </View>
-    </View>
+      <Text style={styles.cycleAmount}>{formatCurrency(amount)}</Text>
+      <View style={styles.cycleFooter}>
+        <View style={styles.nextDateBox}>
+          <MaterialIcons color="#707978" name="event" size={14} />
+          <Text style={styles.nextDateText}>{nextLabel}</Text>
+        </View>
+        <View style={[styles.statusTag, { backgroundColor: progress > 0 ? '#C6EDC4' : '#EFF4FF' }]}>
+          <Text style={[styles.statusTagText, { color: progress > 0 ? '#2E4E30' : '#404848' }]}>
+            {statusLabel.toUpperCase()}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
   );
+}
+
+function getWalletIcon(type: string): any {
+  switch (type) {
+    case 'Bank Account': return 'account-balance';
+    case 'Digital Wallet': return 'account-balance-wallet';
+    case 'Physical Wallet': return 'payments';
+    case 'Savings Account': return 'savings';
+    default: return 'wallet';
+  }
+}
+
+function getWalletPalette(type: string) {
+  switch (type) {
+    case 'Bank Account': return { color: '#FFFFFF', bg: { backgroundColor: '#0D1C2F' } };
+    case 'Digital Wallet': return { color: '#B4EDEC', bg: { backgroundColor: '#0D4D4D' } };
+    case 'Physical Wallet': return { color: '#456646', bg: { backgroundColor: '#C6EDC4' } };
+    case 'Savings Account': return { color: '#D5E6E0', bg: { backgroundColor: '#394844' } };
+    default: return { color: '#003535', bg: { backgroundColor: '#E6EEFF' } };
+  }
 }
 
 function getMovementTitle(type: string, source?: string) {
@@ -372,409 +585,459 @@ function walletIconPalette(walletName: string) {
 
 const styles = StyleSheet.create({
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 132,
-    gap: 16,
-  },
-  sectionTitle: {
-    color: '#0D1C2F',
-    fontSize: 20,
-    lineHeight: 28,
-    fontWeight: '600',
-  },
-  heroCard: {
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: '#003535',
-    borderRadius: 18,
     padding: 20,
-    shadowColor: '#0B2222',
-    shadowOpacity: 0.16,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    paddingBottom: 160,
+    backgroundColor: '#F8F9FF',
+    gap: 32,
   },
-  heroPattern: {
-    position: 'absolute',
-    right: -8,
-    top: -6,
+  heroSection: {
+    gap: 20,
   },
-  heroContent: {
-    zIndex: 1,
-  },
-  heroKicker: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1.6,
-  },
-  heroValue: {
-    marginTop: 6,
-    marginBottom: 18,
-    color: '#FFFFFF',
-    fontSize: 40,
-    lineHeight: 48,
-    fontWeight: '700',
-    letterSpacing: -0.8,
-  },
-  heroStatsRow: {
+  netWorthRow: {
     flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.18)',
-    paddingTop: 16,
-    gap: 8,
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    marginBottom: -8,
   },
-  heroStat: {
+  netWorthLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#707978',
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  netWorthValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#003535',
+  },
+  mainStatsCard: {
+    backgroundColor: '#003535',
+    borderRadius: 28,
+    padding: 24,
+    overflow: 'hidden',
+    position: 'relative',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+  },
+  cardWatermark: {
+    position: 'absolute',
+    right: -20,
+    top: -10,
+    opacity: 0.8,
+  },
+  cardTop: {
+    marginBottom: 24,
+  },
+  cardLabelCaps: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#BFC8C8',
+    letterSpacing: 1.2,
+    marginBottom: 8,
+  },
+  cardMainValue: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -1,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginBottom: 20,
+  },
+  cardBottom: {
+    gap: 0,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  cardStatColumn: {
     flex: 1,
   },
-  heroStatLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  heroStatValue: {
-    marginTop: 4,
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '700',
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  titleRowMeta: {
-    color: '#707978',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  cycleGrid: {
-    gap: 16,
-  },
-  cycleCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#BFC8C8',
-    padding: 20,
-    gap: 16,
-    shadowColor: '#0D1C2F',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
-  },
-  cycleTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 16,
-    alignItems: 'flex-start',
-  },
-  cycleKicker: {
-    color: '#404848',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  cycleValue: {
-    marginTop: 4,
-    color: '#003535',
-    fontSize: 34,
-    lineHeight: 40,
-    fontWeight: '700',
-    letterSpacing: -0.6,
-  },
-  cycleValueMuted: {
-    color: '#0D1C2F',
-  },
-  progressBadge: {
-    width: 68,
-    alignItems: 'center',
-  },
-  progressRing: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  progressFill: {
-    position: 'absolute',
-    left: 0,
-    bottom: 0,
-    height: '100%',
-    opacity: 0.18,
-  },
-  progressText: {
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: '700',
-  },
-  cycleBottomRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-  },
-  cycleDateRow: {
+  bufferLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginBottom: 4,
   },
-  cycleDateText: {
-    color: '#404848',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  statusPill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  statusPillFilled: {
-    backgroundColor: '#C6EDC4',
-  },
-  statusPillPending: {
-    backgroundColor: '#E6EEFF',
-  },
-  statusPillText: {
+  cardStatLabel: {
     fontSize: 12,
-    lineHeight: 16,
+    color: '#BFC8C8',
+    marginBottom: 4,
+    fontWeight: '500',
+  },
+  cardStatValue: {
+    fontSize: 17,
     fontWeight: '700',
+    color: '#FFFFFF',
   },
-  statusPillTextFilled: {
-    color: '#4B6C4C',
+  textSavingsHighlight: {
+    color: '#006A14',
   },
-  statusPillTextPending: {
-    color: '#404848',
+  textDangerHighlight: {
+    color: '#FF8A8A',
   },
-  insightCard: {
-    backgroundColor: '#C6EDC4',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#C6EDC4',
-    padding: 18,
+  quickActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
+    gap: 12,
   },
-  insightIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(1,33,8,0.08)',
+  actionBento: {
+    flex: 1,
+    height: 60,
+    borderRadius: 18,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
-  insightCopy: {
-    flex: 1,
-    gap: 3,
-  },
-  insightTitle: {
-    color: '#2E4E30',
-    fontSize: 20,
-    lineHeight: 28,
-    fontWeight: '600',
-  },
-  insightText: {
-    color: '#2E4E30',
-    fontSize: 14,
-    lineHeight: 20,
-    opacity: 0.92,
-  },
-  inlineButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  inlineButtonPressed: {
-    opacity: 0.76,
-  },
-  inlineButtonText: {
-    color: '#003535',
-    fontSize: 12,
-    lineHeight: 16,
+  actionBentoText: {
+    fontSize: 15,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1.1,
   },
-  walletGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  actionButtonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
+  },
+  section: {
     gap: 16,
   },
-  walletTile: {
-    width: '100%',
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#003535',
+  },
+  seeAllText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#003535',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  cycleGrid: {
+    gap: 12,
+  },
+  cycleCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#BFC8C8',
-    padding: 14,
-    gap: 14,
+    padding: 20,
+    gap: 12,
   },
-  walletTileHeader: {
+  cycleCardPressed: {
+    backgroundColor: '#F0F4F4',
+    transform: [{ scale: 0.99 }],
+  },
+  cycleHeader: {
+    gap: 8,
+  },
+  labelCaps: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#707978',
+    letterSpacing: 1.2,
+  },
+  cycleProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  progressBar: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#EFF4FF',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  progressPercent: {
+    fontSize: 12,
+    fontWeight: '700',
+    width: 32,
+  },
+  cycleAmount: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#0D1C2F',
+    letterSpacing: -0.5,
+  },
+  cycleFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  nextDateBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  nextDateText: {
+    fontSize: 13,
+    color: '#404848',
+  },
+  statusTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  walletScroll: {
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+  },
+  walletPremiumCard: {
+    width: 160,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#BFC8C8',
+    borderRadius: 22,
+    padding: 16,
+    marginRight: 12,
+    justifyContent: 'space-between',
+    height: 120,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  walletCardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
-  walletIconWrap: {
-    width: 40,
-    height: 40,
+  walletTypeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#707978',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    backgroundColor: '#F0F4F4',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  walletCardBottom: {
+    gap: 2,
+  },
+  walletIconBox: {
+    width: 36,
+    height: 36,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  walletIconBlue: {
-    backgroundColor: 'rgba(36,110,233,0.1)',
-  },
-  walletIconGreen: {
-    backgroundColor: 'rgba(0,255,41,0.1)',
-  },
-  walletIconNeutral: {
-    backgroundColor: '#E6EEFF',
-  },
-  walletIconPrimary: {
-    backgroundColor: 'rgba(13,77,77,0.1)',
-  },
-  walletTileLabel: {
-    color: '#707978',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1.1,
-  },
-  walletTileValue: {
-    color: '#0D1C2F',
-    fontSize: 24,
-    lineHeight: 30,
+  walletNameText: {
+    fontSize: 13,
     fontWeight: '600',
+    color: '#404848',
   },
-  activityPanel: {
+  walletBalanceText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#003535',
+  },
+  activityList: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#BFC8C8',
+    borderRadius: 20,
     overflow: 'hidden',
   },
-  activityRow: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#BFC8C8',
+  activityItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
-  activityLeft: {
+  itemLead: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
   },
-  activityIconWrap: {
+  activityIconBox: {
     width: 40,
     height: 40,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  activityNeutralBg: {
-    backgroundColor: '#E6EEFF',
-  },
-  activityPositiveBg: {
-    backgroundColor: '#C6EDC4',
-  },
-  activityTitle: {
-    color: '#0D1C2F',
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '500',
-  },
-  activityMeta: {
-    color: '#707978',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  activityAmount: {
-    color: '#0D1C2F',
-    fontSize: 20,
-    lineHeight: 28,
+  bgPositive: { backgroundColor: '#C6EDC4' },
+  bgNeutral: { backgroundColor: '#EFF4FF' },
+  activityTitleText: {
+    fontSize: 15,
     fontWeight: '600',
+    color: '#0D1C2F',
   },
-  activityAmountPositive: {
+  activityDateText: {
+    fontSize: 12,
+    color: '#707978',
+  },
+  activityAmountText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0D1C2F',
+  },
+  textPositive: {
     color: '#456646',
   },
-  activityFooter: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(230,238,255,0.3)',
-    alignItems: 'center',
-  },
-  historyButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  historyButtonText: {
-    color: '#003535',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1.1,
-  },
-  activityEmpty: {
-    padding: 18,
-    gap: 10,
-  },
-  activityEmptyTitle: {
-    color: '#0D1C2F',
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '600',
-  },
-  activityEmptyText: {
-    color: '#404848',
+  emptyActivityText: {
+    padding: 20,
+    textAlign: 'center',
+    color: '#707978',
     fontSize: 14,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(13, 28, 47, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  modalIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#C6EDC4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#003535',
+  },
+  modalText: {
+    fontSize: 14,
+    color: '#404848',
     lineHeight: 20,
+    marginBottom: 20,
   },
-  primaryAction: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#003535',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  modalScrollArea: {
+    maxHeight: 300,
+    marginBottom: 24,
   },
-  primaryActionPressed: {
-    opacity: 0.86,
+  modalOptionsGrid: {
+    gap: 12,
   },
-  primaryActionText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    lineHeight: 18,
+  modalOptionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8F9FF',
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#DCE6FF',
+  },
+  modalOptionPressed: {
+    backgroundColor: '#EFF4FF',
+    transform: [{ scale: 0.98 }],
+  },
+  modalOptionLead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalOptionTitle: {
+    fontSize: 15,
     fontWeight: '700',
+    color: '#0D1C2F',
+    marginBottom: 2,
   },
-  cardPressed: {
-    opacity: 0.9,
+  modalOptionSubtext: {
+    fontSize: 12,
+    color: '#707978',
+    fontWeight: '500',
+  },
+  modalCancelButton: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 16,
+  },
+  modalCancelText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#707978',
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F4F7F7',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E6EDED',
+    marginBottom: 24,
+  },
+  inputPrefix: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#003535',
+    marginRight: 8,
+  },
+  modalInput: {
+    flex: 1,
+    height: 64,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#003535',
+  },
+  modalConfirmButton: {
+    backgroundColor: '#003535',
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalConfirmText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

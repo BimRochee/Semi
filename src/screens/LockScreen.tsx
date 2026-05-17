@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -7,12 +7,20 @@ import { SemiBrandHeader } from '@/src/components/SemiBrandHeader';
 import { useAppState } from '@/src/hooks/useAppState';
 
 const PIN_LENGTH = 6;
+const DEFAULT_MESSAGE = 'Breaking the one-day millionaire cycle.';
 
 export function LockScreen() {
-  const { unlockWithPin } = useAppState();
+  const { biometricAvailable, biometricLabel, state, unlockWithBiometrics, unlockWithPin } =
+    useAppState();
   const [pin, setPin] = useState('');
-  const [message, setMessage] = useState('Breaking the one-day millionaire cycle.');
+  const [message, setMessage] = useState(DEFAULT_MESSAGE);
   const [error, setError] = useState<string | null>(null);
+  const hasAttemptedBiometricUnlock = useRef(false);
+  const [isBiometricUnlocking, setIsBiometricUnlocking] = useState(false);
+  const biometricEnabled = biometricAvailable && state.settings.biometricUnlockEnabled;
+  const biometricMessage = biometricEnabled
+    ? `Use ${biometricLabel} or enter your PIN.`
+    : DEFAULT_MESSAGE;
 
   useEffect(() => {
     if (pin.length !== PIN_LENGTH) {
@@ -33,11 +41,84 @@ export function LockScreen() {
     unlock();
   }, [pin, unlockWithPin]);
 
+  useEffect(() => {
+    if (error) {
+      return;
+    }
+
+    setMessage(biometricMessage);
+  }, [biometricMessage, error]);
+
+  useEffect(() => {
+    if (!biometricEnabled || hasAttemptedBiometricUnlock.current) {
+      return;
+    }
+
+    let active = true;
+
+    async function tryBiometricUnlock() {
+      hasAttemptedBiometricUnlock.current = true;
+      setIsBiometricUnlocking(true);
+
+      const result = await unlockWithBiometrics();
+
+      if (!active) {
+        return;
+      }
+
+      setIsBiometricUnlocking(false);
+
+      if (result.success) {
+        return;
+      }
+
+      if (result.cancelled) {
+        setMessage('Use your PIN to continue.');
+        return;
+      }
+
+      setError(result.message);
+      setMessage(biometricMessage);
+    }
+
+    void tryBiometricUnlock();
+
+    return () => {
+      active = false;
+    };
+  }, [biometricEnabled, biometricMessage, unlockWithBiometrics]);
+
+  const handleBiometricUnlock = async () => {
+    if (!biometricEnabled || isBiometricUnlocking) {
+      return;
+    }
+
+    setError(null);
+    setMessage(`Confirm ${biometricLabel} to unlock.`);
+    setIsBiometricUnlocking(true);
+
+    const result = await unlockWithBiometrics();
+
+    setIsBiometricUnlocking(false);
+
+    if (result.success) {
+      return;
+    }
+
+    if (result.cancelled) {
+      setMessage('Use your PIN to continue.');
+      return;
+    }
+
+    setError(result.message);
+    setMessage(biometricMessage);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
         <View style={styles.glow} />
-        <SemiBrandHeader centered title="Unlock Semi" subtitle={message} />
+        <SemiBrandHeader centered logoVariant="semi" showBrand={false} title="Unlock Semi" subtitle={message} />
         <View style={styles.content}>
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <PinPad
@@ -45,15 +126,19 @@ export function LockScreen() {
             filledCount={pin.length}
             onDigitPress={(digit) => {
               setError(null);
+              setMessage(biometricMessage);
               setPin((current) => `${current}${digit}`.slice(0, PIN_LENGTH));
             }}
             onDeletePress={() => {
               setError(null);
+              setMessage(biometricMessage);
               setPin((current) => current.slice(0, -1));
             }}
-            onBiometricPress={() => setMessage('Biometric unlock is not enabled in this build.')}
+            onBiometricPress={biometricEnabled ? handleBiometricUnlock : undefined}
           />
-          <Text style={styles.caption}>Biometric Encrypted</Text>
+          <Text style={styles.caption}>
+            {biometricEnabled ? `${biometricLabel} Ready` : 'PIN Required'}
+          </Text>
         </View>
       </View>
     </SafeAreaView>

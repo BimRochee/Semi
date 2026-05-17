@@ -1,6 +1,7 @@
 import {
   MoneyMovement,
   SalaryAllocation,
+  SalaryCycle,
   SalaryDetail,
   SalaryEntry,
   Wallet,
@@ -9,10 +10,10 @@ import {
 type CreateSalaryLedgerInput = {
   id: string;
   movementId: string;
-  walletId: string;
+  cycle: SalaryCycle;
   amount: number;
-  source: string;
-  receivedAt: string;
+  dateReceived: string;
+  receivedWalletId: string;
   note?: string;
 };
 
@@ -20,21 +21,21 @@ type CreateAllocationTransferInput = {
   allocationId: string;
   movementId: string;
   salaryEntryId: string;
+  category: string;
   fromWalletId: string;
   toWalletId: string;
   amount: number;
   createdAt: string;
-  budgetTemplateItemId?: string;
   note?: string;
 };
 
 export function createSalaryLedgerEntry(input: CreateSalaryLedgerInput) {
   const salaryEntry: SalaryEntry = {
     id: input.id,
-    walletId: input.walletId,
+    cycle: input.cycle,
     amount: input.amount,
-    source: input.source,
-    receivedAt: input.receivedAt,
+    dateReceived: input.dateReceived,
+    receivedWalletId: input.receivedWalletId,
     note: input.note,
   };
 
@@ -42,10 +43,10 @@ export function createSalaryLedgerEntry(input: CreateSalaryLedgerInput) {
     id: input.movementId,
     type: 'income',
     amount: input.amount,
-    occurredAt: input.receivedAt,
-    walletId: input.walletId,
+    occurredAt: input.dateReceived,
+    walletId: input.receivedWalletId,
     referenceId: input.id,
-    note: input.note ?? `Salary from ${input.source}`,
+    note: input.note ?? `Salary Cycle: ${input.cycle}`,
   };
 
   return { salaryEntry, moneyMovement };
@@ -55,12 +56,10 @@ export function createAllocationTransfer(input: CreateAllocationTransferInput) {
   const salaryAllocation: SalaryAllocation = {
     id: input.allocationId,
     salaryEntryId: input.salaryEntryId,
-    fromWalletId: input.fromWalletId,
-    toWalletId: input.toWalletId,
+    category: input.category,
     amount: input.amount,
+    walletId: input.toWalletId,
     createdAt: input.createdAt,
-    budgetTemplateItemId: input.budgetTemplateItemId,
-    note: input.note,
   };
 
   const moneyMovement: MoneyMovement = {
@@ -70,8 +69,9 @@ export function createAllocationTransfer(input: CreateAllocationTransferInput) {
     occurredAt: input.createdAt,
     fromWalletId: input.fromWalletId,
     toWalletId: input.toWalletId,
+    category: input.category,
     referenceId: input.salaryEntryId,
-    note: input.note,
+    note: input.note ?? `Allocated to ${input.category}`,
   };
 
   return { salaryAllocation, moneyMovement };
@@ -98,7 +98,7 @@ export function buildSalaryDetail(
 
   return {
     entry: salaryEntry,
-    wallet: wallets.find((wallet) => wallet.id === salaryEntry.walletId),
+    wallet: wallets.find((wallet) => wallet.id === salaryEntry.receivedWalletId),
     allocations,
     allocatedTotal,
     remaining: salaryEntry.amount - allocatedTotal,

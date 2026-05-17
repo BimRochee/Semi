@@ -5,23 +5,22 @@ const NEGATIVE_MOVEMENTS = new Set<MoneyMovement['type']>(['expense']);
 
 export function calculateWalletBalance(wallet: Wallet, moneyMovements: MoneyMovement[]) {
   return moneyMovements.reduce((balance, movement) => {
-    if (movement.walletId === wallet.id && POSITIVE_MOVEMENTS.has(movement.type)) {
-      return balance + movement.amount;
-    }
+    let newBalance = balance;
 
-    if (movement.walletId === wallet.id && NEGATIVE_MOVEMENTS.has(movement.type)) {
-      return balance - movement.amount;
+    if (movement.walletId === wallet.id) {
+      if (POSITIVE_MOVEMENTS.has(movement.type)) newBalance += movement.amount;
+      if (NEGATIVE_MOVEMENTS.has(movement.type)) newBalance -= movement.amount;
     }
 
     if (movement.fromWalletId === wallet.id) {
-      return balance - movement.amount;
+      newBalance -= movement.amount;
     }
 
     if (movement.toWalletId === wallet.id) {
-      return balance + movement.amount;
+      newBalance += movement.amount;
     }
 
-    return balance;
+    return newBalance;
   }, wallet.startingBalance);
 }
 
