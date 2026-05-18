@@ -91,14 +91,14 @@ export function AddSalaryScreen({ onSaved }: AddSalaryScreenProps) {
                 onPress={() => setCycle('15th')}
                 style={[styles.segmentButton, cycle === '15th' && styles.segmentButtonActive]}>
                 <Text style={[styles.segmentLabel, cycle === '15th' && styles.segmentLabelActive]}>
-                  15th
+                  1st Half
                 </Text>
               </Pressable>
               <Pressable
                 onPress={() => setCycle('30th')}
                 style={[styles.segmentButton, cycle === '30th' && styles.segmentButtonActive]}>
                 <Text style={[styles.segmentLabel, cycle === '30th' && styles.segmentLabelActive]}>
-                  30th
+                  2nd Half
                 </Text>
               </Pressable>
             </View>

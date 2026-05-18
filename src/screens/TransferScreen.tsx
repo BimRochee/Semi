@@ -7,9 +7,10 @@ import { formatCurrency } from '@/src/utils/formatCurrency';
 
 type TransferScreenProps = {
   onSaved: () => void;
+  onBack?: () => void;
 };
 
-export function TransferScreen({ onSaved }: TransferScreenProps) {
+export function TransferScreen({ onSaved, onBack }: TransferScreenProps) {
   const { state, transferMoney } = useAppState();
   const [fromWalletId, setFromWalletId] = useState(state.wallets[0]?.id ?? '');
   const [toWalletId, setToWalletId] = useState(state.wallets[1]?.id ?? '');
@@ -48,6 +49,15 @@ export function TransferScreen({ onSaved }: TransferScreenProps) {
 
   return (
     <View style={styles.shell}>
+      {onBack && (
+        <Pressable 
+          onPress={onBack} 
+          style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
+          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+        >
+          <MaterialIcons name="arrow-back" size={24} color="#003535" />
+        </Pressable>
+      )}
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <View style={styles.iconCircle}>
@@ -375,5 +385,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#0D1C2F',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#BFC8C8',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
 });

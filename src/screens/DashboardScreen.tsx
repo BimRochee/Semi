@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useAppState } from '@/src/hooks/useAppState';
 import { useSalary } from '@/src/hooks/useSalary';
@@ -123,11 +123,10 @@ export function DashboardScreen({
 
         {/* Main Stats Card */}
         <View style={styles.mainStatsCard}>
-          <MaterialIcons 
-            name="account-balance" 
-            size={160} 
-            color="rgba(255,255,255,0.06)" 
+          <Image 
+            source={require('../../assets/images/Peek.png')} 
             style={styles.cardWatermark} 
+            resizeMode="contain"
           />
           
           <View style={styles.cardTop}>
@@ -147,7 +146,15 @@ export function DashboardScreen({
                 <View style={styles.bufferLabelRow}>
                   <Text style={[styles.cardStatLabel, { marginBottom: 0 }]}>Spent / Paid (Actual)</Text>
                   <Pressable 
-                    onPress={() => Alert.alert('Spent / Paid', 'This represents all money that has actually left your wallets this month, including unbudgeted expenses and debt payments.')}
+                    onPress={() => {
+                      const title = 'Spent / Paid';
+                      const message = 'This represents all money that has actually left your wallets this month, including unbudgeted expenses and debt payments.';
+                      if (Platform.OS === 'web') {
+                        alert(`${title}\n\n${message}`);
+                      } else {
+                        Alert.alert(title, message);
+                      }
+                    }}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <MaterialIcons name="info-outline" size={14} color="#BFC8C8" />
@@ -164,12 +171,17 @@ export function DashboardScreen({
                     {isOverBudget ? 'Over Budget' : 'Unassigned Funds'}
                   </Text>
                   <Pressable 
-                    onPress={() => Alert.alert(
-                      isOverBudget ? 'Over Budget' : 'Unassigned Funds', 
-                      isOverBudget 
+                    onPress={() => {
+                      const title = isOverBudget ? 'Over Budget' : 'Unassigned Funds';
+                      const message = isOverBudget 
                         ? 'You have spent more on unplanned expenses and debts than you had in your unassigned funds. This means you have dipped into money that was allocated for other bills!\n\nTap the red amount below to settle this deficit.'
-                        : 'This is what you actually have left to safely assign. It is your Total Income minus your Allocations and Actual Spent. If this is 0, every peso has a job (or was already spent)!'
-                    )}
+                        : 'This is what you actually have left to safely assign. It is your Total Income minus your Allocations and Actual Spent. If this is 0, every peso has a job (or was already spent)!';
+                      if (Platform.OS === 'web') {
+                        alert(`${title}\n\n${message}`);
+                      } else {
+                        Alert.alert(title, message);
+                      }
+                    }}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <MaterialIcons name="info-outline" size={14} color="#BFC8C8" />
@@ -226,8 +238,8 @@ export function DashboardScreen({
             nextLabel={formatNextCycleLabel(now, 15)}
             progress={cycle15Progress}
             statusLabel={cycle15Progress > 0 ? 'Allocated' : 'Pending'}
-            title="15th Salary"
-            onPress={() => entry15 && onOpenSalary(entry15.id)}
+            title="1st Half Salary"
+            onPress={() => entry15 ? onOpenSalary(entry15.id) : onOpenAddSalary()}
           />
           <CycleCard
             accentBg="#E6EEFF"
@@ -236,8 +248,8 @@ export function DashboardScreen({
             nextLabel={formatNextCycleLabel(now, 30)}
             progress={cycle30Progress}
             statusLabel={cycle30Progress > 0 ? 'Allocated' : 'Pending'}
-            title="30th Salary"
-            onPress={() => entry30 && onOpenSalary(entry30.id)}
+            title="2nd Half Salary"
+            onPress={() => entry30 ? onOpenSalary(entry30.id) : onOpenAddSalary()}
           />
         </View>
       </View>
@@ -253,7 +265,14 @@ export function DashboardScreen({
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.walletScroll}>
           {walletSummaries.map((wallet) => (
-            <Pressable key={wallet.id} style={styles.walletPremiumCard} onPress={onOpenWallets}>
+            <Pressable 
+              key={wallet.id} 
+              style={({ pressed }) => [
+                styles.walletPremiumCard,
+                pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }
+              ]} 
+              onPress={onOpenWallets}
+            >
               <View style={styles.walletCardTop}>
                 <View style={[styles.walletIconBox, getWalletPalette(wallet.type).bg]}>
                   <MaterialIcons color={getWalletPalette(wallet.type).color} name={getWalletIcon(wallet.type)} size={18} />
@@ -473,7 +492,10 @@ function CycleCard({
       ]}
     >
       <View style={styles.cycleHeader}>
-        <Text style={styles.labelCaps}>{title.toUpperCase()}</Text>
+        <View style={styles.cycleHeaderTop}>
+          <Text style={styles.labelCaps}>{title.toUpperCase()}</Text>
+          <MaterialIcons color="#BFC8C8" name="chevron-right" size={20} style={{ marginRight: -4 }} />
+        </View>
         <View style={styles.cycleProgressRow}>
           <View style={[styles.progressBar, { backgroundColor: accentBg }]}>
             <View
@@ -625,9 +647,12 @@ const styles = StyleSheet.create({
   },
   cardWatermark: {
     position: 'absolute',
-    right: -20,
+    right: -55,
     top: -10,
-    opacity: 0.8,
+    width: 170,
+    height: 170,
+    tintColor: '#FFFFFF',
+    opacity: 0.15,
   },
   cardTop: {
     marginBottom: 24,
@@ -747,6 +772,11 @@ const styles = StyleSheet.create({
   },
   cycleHeader: {
     gap: 8,
+  },
+  cycleHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   labelCaps: {
     fontSize: 10,

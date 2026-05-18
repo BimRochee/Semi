@@ -11,9 +11,10 @@ import { formatCurrency } from '@/src/utils/formatCurrency';
 
 type SalaryDetailScreenProps = {
   salaryEntryId: string;
+  onBack: () => void;
 };
 
-export function SalaryDetailScreen({ salaryEntryId }: SalaryDetailScreenProps) {
+export function SalaryDetailScreen({ salaryEntryId, onBack }: SalaryDetailScreenProps) {
   const { state } = useAppState();
   const { allocateSalary, bulkAllocateSalary, getSalaryDetail } = useSalary();
   const detail = getSalaryDetail(salaryEntryId);
@@ -39,6 +40,11 @@ export function SalaryDetailScreen({ salaryEntryId }: SalaryDetailScreenProps) {
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      {/* Back Button */}
+      <Pressable onPress={onBack} style={styles.backButton}>
+        <MaterialIcons name="arrow-back-ios-new" size={24} color="#003535" />
+      </Pressable>
+
       {/* Hero Section: Cycle Status */}
       <View style={styles.hero}>
         <View style={styles.grainOverlay} />
@@ -71,7 +77,7 @@ export function SalaryDetailScreen({ salaryEntryId }: SalaryDetailScreenProps) {
             onPress={() => {
               const pending = state.budgetTemplates.filter((t) => {
                 if (t.cycle !== detail.entry.cycle) return false;
-                const targetWallet = state.wallets.find(w => w.id === t.defaultWalletId);
+                const targetWallet = state.wallets.find(w => w.id === t.defaultWalletId) || state.wallets[0];
                 const alreadyAllocated = detail.allocations.some(a => a.category === t.category);
                 return targetWallet && !alreadyAllocated && t.amount <= detail.remaining;
               });
@@ -104,7 +110,7 @@ export function SalaryDetailScreen({ salaryEntryId }: SalaryDetailScreenProps) {
                              salaryEntryId: detail.entry.id,
                              category: template.category,
                              fromWalletId: detail.entry.receivedWalletId,
-                             toWalletId: template.defaultWalletId!,
+                             toWalletId: template.defaultWalletId || state.wallets[0]?.id,
                              amount: template.amount,
                              note: template.id === t.id 
                                ? `Allocation: ${template.category} (Shortage Adjustment - Planned: ₱${t.amount}, Deducted: ₱${exceeded})`
@@ -123,7 +129,7 @@ export function SalaryDetailScreen({ salaryEntryId }: SalaryDetailScreenProps) {
                 salaryEntryId: detail.entry.id,
                 category: template.category,
                 fromWalletId: detail.entry.receivedWalletId,
-                toWalletId: template.defaultWalletId!,
+                toWalletId: template.defaultWalletId || state.wallets[0]?.id,
                 amount: template.amount,
                 note: `Allocation: ${template.category}`,
               })));
@@ -139,14 +145,14 @@ export function SalaryDetailScreen({ salaryEntryId }: SalaryDetailScreenProps) {
             <Text style={styles.applyAllCtaText}>EXECUTE ENTIRE BUDGET PLAN</Text>
           </Pressable>
 
-          <Text style={styles.capsHeader}>SUGGESTED ALLOCATIONS ({detail.entry.cycle})</Text>
+          <Text style={styles.capsHeader}>SUGGESTED ALLOCATIONS ({detail.entry.cycle === '15th' ? '1ST HALF' : '2ND HALF'})</Text>
           <View style={styles.stack}>
             {state.budgetTemplates
               .filter((t) => t.cycle === detail.entry.cycle)
               .map((template) => {
                 const targetWallet = state.wallets.find(
                   (wallet) => wallet.id === template.defaultWalletId
-                );
+                ) || state.wallets[0];
                 const allocationCount = detail.allocations.filter(
                   (a) => a.category === template.category
                 ).length;
@@ -154,8 +160,7 @@ export function SalaryDetailScreen({ salaryEntryId }: SalaryDetailScreenProps) {
                 const disabled =
                   !targetWallet ||
                   template.amount > detail.remaining ||
-                  allocationCount > 0 ||
-                  detail.entry.receivedWalletId === template.defaultWalletId;
+                  allocationCount > 0;
 
                 if (allocationCount > 0) return null;
 
@@ -188,7 +193,7 @@ export function SalaryDetailScreen({ salaryEntryId }: SalaryDetailScreenProps) {
                             salaryEntryId: detail.entry.id,
                             category: template.category,
                             fromWalletId: detail.entry.receivedWalletId,
-                            toWalletId: targetWallet!.id,
+                            toWalletId: targetWallet.id,
                             amount: template.amount,
                             note: `Allocation: ${template.category}`,
                           });
@@ -272,6 +277,16 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 160,
     backgroundColor: '#F8F9FF',
+    position: 'relative',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 24,
+    left: 20,
+    zIndex: 10,
+    padding: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
   },
   hero: {
     paddingVertical: 32,

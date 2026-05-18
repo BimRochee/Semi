@@ -6,7 +6,7 @@ import { useWallets } from '@/src/hooks/useWallets';
 import { WalletType } from '@/src/domain/types';
 import { formatCurrency } from '@/src/utils/formatCurrency';
 
-export function WalletsScreen() {
+export function WalletsScreen({ onOpenTransfer }: { onOpenTransfer?: () => void }) {
   const { walletSummaries, addWallet, updateWallet, deleteWallet } = useWallets();
 
   // Form State
@@ -95,130 +95,207 @@ export function WalletsScreen() {
         </View>
 
         <View style={styles.cardStack}>
-          {walletSummaries.map((wallet) => (
-            <View key={wallet.id} style={styles.walletCard}>
-              <View style={styles.cardLead}>
-                <View style={[styles.iconBox, getIconBoxStyle(wallet.type)]}>
-                  <MaterialIcons
-                    color={getIconColor(wallet.type)}
-                    name={getWalletIcon(wallet.type)}
-                    size={24}
-                  />
-                </View>
-                <View>
-                  <Text style={styles.walletTypeLabel}>{wallet.type}</Text>
-                  <Text style={styles.walletName}>{wallet.name}</Text>
-                </View>
-              </View>
+          {walletSummaries.map((wallet) => {
+            const isEditingThis = editingWalletId === wallet.id;
+            return (
+              <View key={wallet.id} style={{ gap: 12 }}>
+                <View style={styles.walletCard}>
+                  <View style={styles.cardLead}>
+                    <View style={[styles.iconBox, getIconBoxStyle(wallet.type)]}>
+                      <MaterialIcons
+                        color={getIconColor(wallet.type)}
+                        name={getWalletIcon(wallet.type)}
+                        size={24}
+                      />
+                    </View>
+                    <View>
+                      <Text style={styles.walletTypeLabel}>{wallet.type}</Text>
+                      <Text style={styles.walletName}>{wallet.name}</Text>
+                    </View>
+                  </View>
 
-              <View style={styles.cardTrail}>
-                <View style={styles.balanceInfo}>
-                  <Text style={styles.balanceLabel}>Balance</Text>
-                  <Text style={styles.balanceValue}>{formatCurrency(wallet.currentBalance)}</Text>
+                  <View style={styles.cardTrail}>
+                    <View style={styles.balanceInfo}>
+                      <Text style={styles.balanceLabel}>Balance</Text>
+                      <Text style={styles.balanceValue}>{formatCurrency(wallet.currentBalance)}</Text>
+                    </View>
+                    <Pressable onPress={() => handleStartEdit(wallet)} style={styles.editButton}>
+                      <MaterialIcons color="#707978" name="edit" size={20} />
+                    </Pressable>
+                  </View>
                 </View>
-                <Pressable onPress={() => handleStartEdit(wallet)} style={styles.editButton}>
-                  <MaterialIcons color="#707978" name="edit" size={20} />
-                </Pressable>
+
+                {isEditingThis && (
+                  <View style={[styles.addFormSection, { marginTop: -4, marginBottom: 8 }]}>
+                    <View style={styles.addFormHeader}>
+                      <View style={styles.headerTitleRow}>
+                        <MaterialIcons color="#003535" name="edit" size={24} />
+                        <Text style={styles.addFormTitle}>Edit Wallet</Text>
+                      </View>
+                      <Pressable onPress={resetForm} style={styles.closeButton}>
+                        <MaterialIcons color="#707978" name="close" size={24} />
+                      </Pressable>
+                    </View>
+
+                    <View style={styles.formStack}>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Wallet Name</Text>
+                        <TextInput
+                          placeholder="e.g. GCash or Savings Account"
+                          placeholderTextColor="#bfc8c8"
+                          style={styles.textInput}
+                          value={name}
+                          onChangeText={setName}
+                        />
+                      </View>
+
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Wallet Type</Text>
+                        <View style={styles.typeSelector}>
+                          {(
+                            ['Digital Wallet', 'Bank Account', 'Physical Wallet', 'Savings Account'] as WalletType[]
+                          ).map((t) => (
+                            <Pressable
+                              key={t}
+                              onPress={() => setType(t)}
+                              style={[styles.typeOption, type === t && styles.typeOptionActive]}>
+                              <Text style={[styles.typeOptionText, type === t && styles.typeOptionTextActive]}>
+                                {t}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Starting Balance</Text>
+                        <View style={styles.amountInputRow}>
+                          <Text style={styles.currencySymbol}>PHP</Text>
+                          <TextInput
+                            keyboardType="numeric"
+                            placeholder="0.00"
+                            placeholderTextColor="#bfc8c8"
+                            style={styles.amountInput}
+                            value={startingBalance}
+                            onChangeText={setStartingBalance}
+                          />
+                        </View>
+                      </View>
+
+                      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+                      <View style={styles.actionRow}>
+                        <Pressable
+                          onPress={handleDeleteWallet}
+                          style={({ pressed }) => [styles.deleteButton, pressed && styles.deleteButtonPressed]}>
+                          <MaterialIcons color="#BA1A1A" name="delete-outline" size={24} />
+                        </Pressable>
+
+                        <Pressable
+                          onPress={handleSubmitWallet}
+                          style={({ pressed }) => [styles.createButton, pressed && styles.createButtonPressed]}>
+                          <MaterialIcons color="#FFFFFF" name="save" size={24} />
+                          <Text style={styles.createButtonText}>Save</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+                )}
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
       </View>
 
       {/* Add New Wallet Section */}
       {!isFormVisible ? (
-        <Pressable
-          onPress={() => setIsFormVisible(true)}
-          style={({ pressed }) => [styles.expandButton, pressed && styles.expandButtonPressed]}>
-          <MaterialIcons color="#003535" name="add-circle-outline" size={24} />
-          <Text style={styles.expandButtonText}>ADD NEW WALLET</Text>
-        </Pressable>
-      ) : (
+        <View style={{ gap: 12 }}>
+          <Pressable
+            onPress={() => setIsFormVisible(true)}
+            style={({ pressed }) => [styles.expandButton, pressed && styles.expandButtonPressed]}>
+            <MaterialIcons color="#003535" name="add-circle-outline" size={24} />
+            <Text style={styles.expandButtonText}>ADD NEW WALLET</Text>
+          </Pressable>
+          
+          {onOpenTransfer && (
+            <Pressable
+              onPress={onOpenTransfer}
+              style={({ pressed }) => [styles.expandButton, pressed && styles.expandButtonPressed, { backgroundColor: '#E6EEFF', borderColor: '#BFC8C8' }]}>
+              <MaterialIcons color="#003535" name="swap-horiz" size={24} />
+              <Text style={styles.expandButtonText}>TRANSFER MONEY</Text>
+            </Pressable>
+          )}
+        </View>
+      ) : editingWalletId === null ? (
         <View style={styles.addFormSection}>
           <View style={styles.addFormHeader}>
             <View style={styles.headerTitleRow}>
-              <MaterialIcons color="#003535" name={editingWalletId ? 'edit' : 'add-circle'} size={24} />
-              <Text style={styles.addFormTitle}>
-                {editingWalletId ? 'Edit Wallet' : 'Add New Wallet'}
-              </Text>
+              <MaterialIcons color="#003535" name="add-circle" size={24} />
+              <Text style={styles.addFormTitle}>Add New Wallet</Text>
             </View>
             <Pressable onPress={resetForm} style={styles.closeButton}>
               <MaterialIcons color="#707978" name="close" size={24} />
             </Pressable>
           </View>
 
-        <View style={styles.formStack}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Wallet Name</Text>
-            <TextInput
-              placeholder="e.g. GCash or Savings Account"
-              placeholderTextColor="#bfc8c8"
-              style={styles.textInput}
-              value={name}
-              onChangeText={setName}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Wallet Type</Text>
-            <View style={styles.typeSelector}>
-              {(
-                ['Digital Wallet', 'Bank Account', 'Physical Wallet', 'Savings Account'] as WalletType[]
-              ).map((t) => (
-                <Pressable
-                  key={t}
-                  onPress={() => setType(t)}
-                  style={[styles.typeOption, type === t && styles.typeOptionActive]}>
-                  <Text style={[styles.typeOptionText, type === t && styles.typeOptionTextActive]}>
-                    {t}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Starting Balance</Text>
-            <View style={styles.amountInputRow}>
-              <Text style={styles.currencySymbol}>PHP</Text>
+          <View style={styles.formStack}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Wallet Name</Text>
               <TextInput
-                keyboardType="numeric"
-                placeholder="0.00"
+                placeholder="e.g. GCash or Savings Account"
                 placeholderTextColor="#bfc8c8"
-                style={styles.amountInput}
-                value={startingBalance}
-                onChangeText={setStartingBalance}
+                style={styles.textInput}
+                value={name}
+                onChangeText={setName}
               />
             </View>
-          </View>
 
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Wallet Type</Text>
+              <View style={styles.typeSelector}>
+                {(
+                  ['Digital Wallet', 'Bank Account', 'Physical Wallet', 'Savings Account'] as WalletType[]
+                ).map((t) => (
+                  <Pressable
+                    key={t}
+                    onPress={() => setType(t)}
+                    style={[styles.typeOption, type === t && styles.typeOptionActive]}>
+                    <Text style={[styles.typeOptionText, type === t && styles.typeOptionTextActive]}>
+                      {t}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
 
-          <View style={styles.actionRow}>
-            {editingWalletId ? (
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Starting Balance</Text>
+              <View style={styles.amountInputRow}>
+                <Text style={styles.currencySymbol}>PHP</Text>
+                <TextInput
+                  keyboardType="numeric"
+                  placeholder="0.00"
+                  placeholderTextColor="#bfc8c8"
+                  style={styles.amountInput}
+                  value={startingBalance}
+                  onChangeText={setStartingBalance}
+                />
+              </View>
+            </View>
+
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            <View style={styles.actionRow}>
               <Pressable
-                onPress={handleDeleteWallet}
-                style={({ pressed }) => [styles.deleteButton, pressed && styles.deleteButtonPressed]}>
-                <MaterialIcons color="#BA1A1A" name="delete-outline" size={24} />
+                onPress={handleSubmitWallet}
+                style={({ pressed }) => [styles.createButton, pressed && styles.createButtonPressed]}>
+                <MaterialIcons color="#FFFFFF" name="add" size={24} />
+                <Text style={styles.createButtonText}>Create</Text>
               </Pressable>
-            ) : null}
-
-            <Pressable
-              onPress={handleSubmitWallet}
-              style={({ pressed }) => [styles.createButton, pressed && styles.createButtonPressed]}>
-              <MaterialIcons
-                color="#FFFFFF"
-                name={editingWalletId ? 'save' : 'add'}
-                size={24}
-              />
-              <Text style={styles.createButtonText}>
-                {editingWalletId ? 'Save' : 'Create'}
-              </Text>
-            </Pressable>
+            </View>
           </View>
         </View>
-        </View>
-      )}
+      ) : null}
     </ScrollView>
   );
 }

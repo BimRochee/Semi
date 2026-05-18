@@ -5,7 +5,7 @@ import { useAppState } from '@/src/hooks/useAppState';
 export function useSalary() {
   const { state, addSalary, allocateSalary, bulkAllocateSalary, adjustAllocationAmount } = useAppState();
   const salaryEntries = [...state.salaryEntries].sort((left, right) =>
-    right.receivedAt.localeCompare(left.receivedAt)
+    right.dateReceived.localeCompare(left.dateReceived)
   );
   const budgetTemplateTotal = calculateTemplateBudgetTotal(state.budgetTemplates);
 

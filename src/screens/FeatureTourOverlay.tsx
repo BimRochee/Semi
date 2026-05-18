@@ -34,33 +34,34 @@ const STEPS: TourStep[] = [
   {
     id: 'fab',
     title: 'Start Here',
-    description: 'Tap this plus button to add your 15th or 30th salary. This is where your budget planning begins.',
+    description: 'Tap this plus button to log your new salary payout, or create a budget plan. This is where your financial planning begins.',
     targetScreen: 'dashboard',
     bottom: 110,
-    pointerRight: 30,
+    pointerLeft: (width / 2) + 84, // Points perfectly to the FAB
   },
   {
     id: 'budget',
     title: 'Allocation Plan',
-    description: 'Create your master plan. Set where your 15th and 30th salaries should go before you even receive them.',
+    description: 'Create your master plan. Set where your first-half and second-half salary payouts should go before you even receive them.',
     targetScreen: 'budgetTemplates',
     bottom: 110,
-    pointerLeft: width / 2 - 105,
+    pointerLeft: (width / 2) + 84, // Points perfectly to the FAB
   },
   {
     id: 'executePlan',
     title: 'Execute with One Tap',
     description: "When your salary arrives, tap on its cycle card here. Inside, you'll find the 'Execute Entire Budget Plan' button to automatically move your money into its target wallets instantly!",
     targetScreen: 'dashboard',
-    bottom: 260,
+    bottom: 290,
+    pointerRight: 40,
   },
   {
     id: 'updateBalance',
     title: 'Keep It Real',
     description: "Don't sweat the small expenses. Once a week, tap 'Update Balance' on your dashboard to tell the app exactly how much money you actually have left. It will automatically detect missing funds and deduct them from your envelopes to keep your budget balanced!",
     targetScreen: 'dashboard',
-    top: 320,
-    pointerLeft: 60,
+    top: 500,
+    pointerRight: 80,
     pointerTop: true,
   },
   {
@@ -69,7 +70,7 @@ const STEPS: TourStep[] = [
     description: 'Add your Bank, GCash, Maya, or Physical cash here. See your total balance across all accounts.',
     targetScreen: 'wallets',
     bottom: 110,
-    pointerLeft: width / 2 - 40,
+    pointerLeft: (width / 2) - 70, // Points perfectly to center Wallets tab
   },
   {
     id: 'transfer',
@@ -77,28 +78,17 @@ const STEPS: TourStep[] = [
     description: 'Use this when you move money between accounts—like withdrawing from your bank to your wallet.',
     targetScreen: 'transfer',
     bottom: 110,
-    pointerLeft: width / 2 + 30,
+    pointerLeft: (width / 2) - 70, // Points perfectly to center Wallets tab
   },
   {
     id: 'menu',
-    title: 'Other Menu',
-    description: 'Tap here to access your full transaction History and manage your Payable/Debt schedules.',
-    targetScreen: 'dashboard',
-    top: 65,
-    left: 10,
-    right: 40,
-    pointerLeft: 10,
-    pointerTop: true,
-  },
-  {
-    id: 'profile',
-    title: 'Security & Vault',
-    description: 'Manage your PIN, Biometrics, and export your data for safekeeping here.',
+    title: 'Menu & Settings',
+    description: 'Tap the profile icon to access your full transaction History, manage your Payables, and enter the Security Vault to manage your PIN.',
     targetScreen: 'dashboard',
     top: 65,
     left: 40,
     right: 10,
-    pointerRight: 10,
+    pointerRight: 20,
     pointerTop: true,
   },
 ];
@@ -126,7 +116,7 @@ export function FeatureTourOverlay({ navigateTo }: { navigateTo: (screen: any) =
   const currentStep = STEPS[stepIndex];
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]} pointerEvents="box-none">
       {/* Dimmed Backdrop */}
       <Animated.View 
         entering={FadeIn} 
@@ -213,10 +203,10 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '45deg' }],
   },
   pointerBottom: {
-    bottom: -16,
+    bottom: -8,
   },
   pointerTop: {
-    top: -12,
+    top: -8,
   },
   title: {
     fontSize: 20,

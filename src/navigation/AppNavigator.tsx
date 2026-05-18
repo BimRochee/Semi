@@ -16,6 +16,8 @@ import { SalaryDetailScreen } from '@/src/screens/SalaryDetailScreen';
 import { SecuritySettingsScreen } from '@/src/screens/SecuritySettingsScreen';
 import { WalletsScreen } from '@/src/screens/WalletsScreen';
 import { FeatureTourOverlay } from '@/src/screens/FeatureTourOverlay';
+import { SalaryPlanScreen } from '@/src/screens/SalaryPlanScreen';
+import { MenuScreen } from '@/src/screens/MenuScreen';
 
 import { TransferScreen } from '@/src/screens/TransferScreen';
 import { PayablesScreen } from '@/src/screens/PayablesScreen';
@@ -29,6 +31,7 @@ import { Modal } from 'react-native';
 type ScreenKey =
   | 'createPin'
   | 'dashboard'
+  | 'salaryPlan'
   | 'wallets'
   | 'history'
   | 'addSalary'
@@ -41,9 +44,10 @@ type ScreenKey =
   | 'payableDetail'
   | 'payInstallment'
   | 'createPayable'
-  | 'balanceReconciliation';
+  | 'balanceReconciliation'
+  | 'menu';
 
-type NavTabKey = 'home' | 'budget' | 'wallets' | 'transfer';
+type NavTabKey = 'home' | 'wallets' | 'payables';
 
 export function AppNavigator() {
   const { hydrated, hasPin, isLocked, state } = useAppState();
@@ -51,9 +55,9 @@ export function AppNavigator() {
   const [selectedSalaryEntryId, setSelectedSalaryEntryId] = useState<string | null>(null);
   const [selectedPayableId, setSelectedPayableId] = useState<string | null>(null);
   const [selectedInstallmentId, setSelectedInstallmentId] = useState<string | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [isAddChoiceVisible, setIsAddChoiceVisible] = useState(false);
   const [isAboutVisible, setIsAboutVisible] = useState(false);
+  const [isMenuVisible, setIsMenuVisible] = useState(false);
 
   const [showSplash, setShowSplash] = useState(true);
   const [splashProgress, setSplashProgress] = useState(0);
@@ -109,7 +113,6 @@ export function AppNavigator() {
   }
 
   const navigateTo = (screen: ScreenKey) => {
-    setMenuOpen(false);
     setIsAddChoiceVisible(false);
     setActiveScreen(screen);
     if (screen !== 'salaryDetail') setSelectedSalaryEntryId(null);
@@ -122,11 +125,11 @@ export function AppNavigator() {
       case 'createPin':
         return <CreatePinScreen />;
       case 'wallets':
-        return <WalletsScreen />;
+        return <WalletsScreen onOpenTransfer={() => navigateTo('transfer')} />;
       case 'history':
         return <HistoryScreen />;
       case 'transfer':
-        return <TransferScreen onSaved={() => navigateTo('history')} />;
+        return <TransferScreen onSaved={() => navigateTo('history')} onBack={() => navigateTo('dashboard')} />;
       case 'payables':
         return (
           <PayablesScreen
@@ -193,7 +196,10 @@ export function AppNavigator() {
         );
       case 'salaryDetail':
         return selectedSalaryEntryId ? (
-          <SalaryDetailScreen salaryEntryId={selectedSalaryEntryId} />
+          <SalaryDetailScreen
+            salaryEntryId={selectedSalaryEntryId}
+            onBack={() => navigateTo('dashboard')}
+          />
         ) : (
           <DashboardScreen
             onOpenWallets={() => navigateTo('wallets')}
@@ -212,6 +218,22 @@ export function AppNavigator() {
         return <BudgetTemplateScreen />;
       case 'security':
         return <SecuritySettingsScreen onNavigateToCreatePin={() => navigateTo('createPin')} />;
+      case 'salaryPlan':
+        return (
+          <SalaryPlanScreen
+            onAddSalary={() => navigateTo('addSalary')}
+            onAddExtraMoney={() => navigateTo('addExtraIncome')}
+            onOpenBudgetTemplates={() => navigateTo('budgetTemplates')}
+          />
+        );
+      case 'menu':
+        return (
+          <MenuScreen
+            onNavigateToHistory={() => navigateTo('history')}
+            onNavigateToSettings={() => navigateTo('security')}
+            onNavigateToAbout={() => setIsAboutVisible(true)}
+          />
+        );
       case 'dashboard':
       default:
         return (
@@ -233,7 +255,7 @@ export function AppNavigator() {
 
   const showMainChrome = activeScreen !== 'createPin';
   const showTopBar = showMainChrome && activeScreen !== 'balanceReconciliation';
-  const activeTab = getActiveTab(activeScreen);
+  const activeTab = isAddChoiceVisible ? null : getActiveTab(activeScreen);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -245,15 +267,10 @@ export function AppNavigator() {
             {showTopBar && (
               <View style={styles.topBar}>
               <View style={styles.topBarLeft}>
-                <Pressable
-                  onPress={() => setMenuOpen((current) => !current)}
-                  style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}>
-                  <MaterialIcons color="#003535" name="menu" size={24} />
-                </Pressable>
                 <Text style={styles.topBarTitle}>Semi</Text>
               </View>
               <Pressable
-                onPress={() => navigateTo('security')}
+                onPress={() => setIsMenuVisible(true)}
                 style={({ pressed }) => [styles.profileButton, pressed && styles.iconButtonPressed]}>
                 {state.settings.profilePictureUri ? (
                   <Image
@@ -267,6 +284,94 @@ export function AppNavigator() {
               </Pressable>
             </View>
             )}
+
+            {/* Menu Modal */}
+            <Modal
+              animationType="slide"
+              transparent={true}
+              visible={isMenuVisible}
+              onRequestClose={() => setIsMenuVisible(false)}
+            >
+              <Pressable 
+                style={styles.menuModalOverlay} 
+                onPress={() => setIsMenuVisible(false)}
+              >
+                <Pressable 
+                  style={styles.menuModalContent}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <View style={styles.dropdownArrowBorder} />
+                  <View style={styles.dropdownArrow} />
+                  <View style={styles.dropdownArrowCover} />
+                  <View style={styles.menuModalHeader}>
+                    <Text style={styles.menuModalTitle}>Menu</Text>
+                    <Pressable 
+                      onPress={() => setIsMenuVisible(false)} 
+                      style={({ pressed }) => [styles.menuModalCloseButton, pressed && styles.menuModalCloseButtonPressed]}
+                      hitSlop={12}
+                    >
+                      <MaterialIcons name="close" size={24} color="#003535" />
+                    </Pressable>
+                  </View>
+                  
+                  <View style={styles.menuModalBody}>
+                    <Pressable
+                      onPress={() => {
+                        setIsMenuVisible(false);
+                        navigateTo('history');
+                      }}
+                      style={({ pressed }) => [styles.menuModalItem, pressed && styles.menuModalItemPressed]}>
+                      <View style={styles.menuModalItemLead}>
+                        <View style={styles.menuModalItemIcon}>
+                          <MaterialIcons color="#003535" name="history" size={20} />
+                        </View>
+                        <View>
+                          <Text style={styles.menuModalItemTitle}>History</Text>
+                          <Text style={styles.menuModalItemCopy}>Review your past ledger activity.</Text>
+                        </View>
+                      </View>
+                      <MaterialIcons color="#707978" name="chevron-right" size={18} />
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => {
+                        setIsMenuVisible(false);
+                        navigateTo('security');
+                      }}
+                      style={({ pressed }) => [styles.menuModalItem, pressed && styles.menuModalItemPressed]}>
+                      <View style={styles.menuModalItemLead}>
+                        <View style={styles.menuModalItemIcon}>
+                          <MaterialIcons color="#003535" name="settings" size={20} />
+                        </View>
+                        <View>
+                          <Text style={styles.menuModalItemTitle}>Settings & Security</Text>
+                          <Text style={styles.menuModalItemCopy}>Manage your PIN, biometrics, and profile.</Text>
+                        </View>
+                      </View>
+                      <MaterialIcons color="#707978" name="chevron-right" size={18} />
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => {
+                        setIsMenuVisible(false);
+                        setIsAboutVisible(true);
+                      }}
+                      style={({ pressed }) => [styles.menuModalItem, pressed && styles.menuModalItemPressed]}>
+                      <View style={styles.menuModalItemLead}>
+                        <View style={styles.menuModalItemIcon}>
+                          <MaterialIcons color="#003535" name="info" size={20} />
+                        </View>
+                        <View>
+                          <Text style={styles.menuModalItemTitle}>About Semi</Text>
+                          <Text style={styles.menuModalItemCopy}>What does the name mean?</Text>
+                        </View>
+                      </View>
+                      <MaterialIcons color="#707978" name="chevron-right" size={18} />
+                    </Pressable>
+                  </View>
+                </Pressable>
+              </Pressable>
+            </Modal>
 
             {/* About Modal */}
             <Modal
@@ -329,7 +434,7 @@ export function AppNavigator() {
               </View>
             </Modal>
 
-            {/* Add Choice Modal */}
+            {/* Salary Plan Modal */}
             <Modal
               animationType="fade"
               transparent={true}
@@ -341,7 +446,7 @@ export function AppNavigator() {
                 onPress={() => setIsAddChoiceVisible(false)}
               >
                 <View style={styles.choiceMenu}>
-                  <Text style={styles.choiceTitle}>What are we adding?</Text>
+                  <Text style={styles.choiceTitle}>Salary Plan</Text>
                   
                   <Pressable 
                     onPress={() => navigateTo('addSalary')}
@@ -350,9 +455,9 @@ export function AppNavigator() {
                     <View style={[styles.choiceIcon, { backgroundColor: '#C6EDC4' }]}>
                       <MaterialIcons name="payments" size={24} color="#003535" />
                     </View>
-                    <View>
+                    <View style={{flex: 1}}>
                       <Text style={styles.choiceLabel}>New Salary</Text>
-                      <Text style={styles.choiceSub}>Log 15th/30th payout with budget.</Text>
+                      <Text style={styles.choiceSub}>Log your semi-monthly salary payout and allocate budget.</Text>
                     </View>
                   </Pressable>
 
@@ -363,82 +468,27 @@ export function AppNavigator() {
                     <View style={[styles.choiceIcon, { backgroundColor: '#E6EEFF' }]}>
                       <MaterialIcons name="add-card" size={24} color="#003535" />
                     </View>
-                    <View>
+                    <View style={{flex: 1}}>
                       <Text style={styles.choiceLabel}>Extra Money</Text>
-                      <Text style={styles.choiceSub}>Gifts, bonuses, or found money.</Text>
+                      <Text style={styles.choiceSub}>Log gifts, bonuses, or found money.</Text>
+                    </View>
+                  </Pressable>
+
+                  <Pressable 
+                    onPress={() => navigateTo('budgetTemplates')}
+                    style={({ pressed }) => [styles.choiceItem, pressed && styles.choicePressed]}
+                  >
+                    <View style={[styles.choiceIcon, { backgroundColor: '#F8F9FF' }]}>
+                      <MaterialIcons name="account-balance-wallet" size={24} color="#003535" />
+                    </View>
+                    <View style={{flex: 1}}>
+                      <Text style={styles.choiceLabel}>Budget Templates</Text>
+                      <Text style={styles.choiceSub}>Set default allocation rules for your salary.</Text>
                     </View>
                   </Pressable>
                 </View>
               </Pressable>
             </Modal>
-
-            {menuOpen ? (
-              <View pointerEvents="box-none" style={styles.menuLayer}>
-                <Pressable onPress={() => setMenuOpen(false)} style={styles.menuBackdrop} />
-                <View style={styles.menuPanel}>
-                  <Pressable
-                    onPress={() => navigateTo('history')}
-                    style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}>
-                    <View style={styles.menuItemLead}>
-                      <View style={styles.menuItemIcon}>
-                        <MaterialIcons color="#404848" name="history" size={20} />
-                      </View>
-                      <View>
-                        <Text style={styles.menuItemTitle}>History</Text>
-                        <Text style={styles.menuItemCopy}>Review your past ledger activity.</Text>
-                      </View>
-                    </View>
-                    <MaterialIcons color="#707978" name="chevron-right" size={18} />
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => navigateTo('payables')}
-                    style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
-                  >
-                    <View style={styles.menuItemLead}>
-                      <View style={styles.menuItemIcon}>
-                        <MaterialIcons color="#404848" name="receipt-long" size={20} />
-                      </View>
-                      <View>
-                        <Text style={styles.menuItemTitle}>Payables / Debt</Text>
-                        <Text style={styles.menuItemCopy}>Track loans and installment schedules.</Text>
-                      </View>
-                    </View>
-                    <MaterialIcons color="#707978" name="chevron-right" size={18} />
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => navigateTo('security')}
-                    style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}>
-                    <View style={styles.menuItemLead}>
-                      <View style={styles.menuItemIcon}>
-                        <MaterialIcons color="#404848" name="settings" size={20} />
-                      </View>
-                      <View>
-                        <Text style={styles.menuItemTitle}>Settings</Text>
-                        <Text style={styles.menuItemCopy}>Manage your PIN, biometrics, and lock rules.</Text>
-                      </View>
-                    </View>
-                    <MaterialIcons color="#707978" name="chevron-right" size={18} />
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => { setMenuOpen(false); setIsAboutVisible(true); }}
-                    style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}>
-                    <View style={styles.menuItemLead}>
-                      <View style={styles.menuItemIcon}>
-                        <MaterialIcons color="#404848" name="info" size={20} />
-                      </View>
-                      <View>
-                        <Text style={styles.menuItemTitle}>About Semi</Text>
-                        <Text style={styles.menuItemCopy}>What does the name mean?</Text>
-                      </View>
-                    </View>
-                    <MaterialIcons color="#707978" name="chevron-right" size={18} />
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
 
             {showMainChrome && (
               <View pointerEvents="box-none" style={styles.floatingNavFrame}>
@@ -450,19 +500,14 @@ export function AppNavigator() {
                       onPress={() => navigateTo('dashboard')}
                     />
                     <BottomNavItem
-                      active={activeTab === 'budget'}
-                      icon="account-balance-wallet"
-                      onPress={() => navigateTo('budgetTemplates')}
-                    />
-                    <BottomNavItem
                       active={activeTab === 'wallets'}
-                      icon="payments"
+                      icon="account-balance"
                       onPress={() => navigateTo('wallets')}
                     />
                     <BottomNavItem
-                      active={activeTab === 'transfer'}
-                      icon="swap-horiz"
-                      onPress={() => navigateTo('transfer')}
+                      active={activeTab === 'payables'}
+                      icon="receipt-long"
+                      onPress={() => navigateTo('payables')}
                     />
                   </View>
 
@@ -470,11 +515,11 @@ export function AppNavigator() {
                     onPress={() => setIsAddChoiceVisible(true)}
                     style={({ pressed }) => [
                       styles.fab,
-                      (activeScreen === 'addSalary' || activeScreen === 'addExtraIncome') && styles.fabActive,
+                      (isAddChoiceVisible || activeScreen === 'addSalary' || activeScreen === 'addExtraIncome' || activeScreen === 'budgetTemplates') && styles.fabActive,
                       pressed && styles.fabPressed,
                     ]}>
                     <MaterialIcons
-                      color={activeScreen === 'addSalary' ? '#003535' : '#FFFFFF'}
+                      color={(isAddChoiceVisible || activeScreen === 'addSalary' || activeScreen === 'addExtraIncome' || activeScreen === 'budgetTemplates') ? '#003535' : '#FFFFFF'}
                       name="add"
                       size={32}
                     />
@@ -495,18 +540,27 @@ export function AppNavigator() {
 
 function getActiveTab(activeScreen: ScreenKey): NavTabKey | null {
   switch (activeScreen) {
+    case 'salaryPlan':
+    case 'addSalary':
+    case 'addExtraIncome':
     case 'budgetTemplates':
-      return 'budget';
+      return null;
     case 'wallets':
+    case 'transfer':
       return 'wallets';
     case 'dashboard':
-      return 'home';
-    case 'transfer':
-      return 'transfer';
-    case 'addSalary':
     case 'salaryDetail':
+    case 'balanceReconciliation':
+      return 'home';
+    case 'payables':
+    case 'createPayable':
+    case 'payableDetail':
+    case 'payInstallment':
+      return 'payables';
+    case 'menu':
     case 'history':
     case 'security':
+      return null;
     default:
       return null;
   }
@@ -764,7 +818,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#003535',
     paddingHorizontal: 8,
     height: 64,
-    minWidth: 280,
+    minWidth: 220,
     shadowColor: '#000000',
     shadowOpacity: 0.2,
     shadowRadius: 10,
@@ -952,5 +1006,135 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#0D1C2F',
     fontWeight: '500',
+  },
+  menuModalOverlay: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    zIndex: 10,
+  },
+  menuModalContent: {
+    position: 'absolute',
+    top: 58,
+    right: 20,
+    width: 290,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#BFC8C8',
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+    zIndex: 10,
+  },
+  menuModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+    paddingHorizontal: 4,
+  },
+  menuModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#003535',
+  },
+  menuModalCloseButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F0F4F4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuModalCloseButtonPressed: {
+    opacity: 0.8,
+    backgroundColor: '#E2EAEB',
+  },
+  menuModalBody: {
+    gap: 10,
+  },
+  menuModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#EFF4FF',
+    backgroundColor: '#F8F9FF',
+  },
+  menuModalItemPressed: {
+    backgroundColor: '#EFF4FF',
+    transform: [{ scale: 0.99 }],
+  },
+  menuModalItemLead: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  menuModalItemIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E6EEFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuModalItemTitle: {
+    color: '#0D1C2F',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  menuModalItemCopy: {
+    color: '#404848',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  dropdownArrowBorder: {
+    position: 'absolute',
+    top: -8,
+    right: 10,
+    width: 0,
+    height: 0,
+    backgroundColor: 'transparent',
+    borderStyle: 'solid',
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderBottomWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#BFC8C8',
+    zIndex: 15,
+  },
+  dropdownArrow: {
+    position: 'absolute',
+    top: -7,
+    right: 10,
+    width: 0,
+    height: 0,
+    backgroundColor: 'transparent',
+    borderStyle: 'solid',
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderBottomWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#FFFFFF',
+    zIndex: 15,
+  },
+  dropdownArrowCover: {
+    position: 'absolute',
+    top: -1,
+    right: 11,
+    width: 14,
+    height: 2,
+    backgroundColor: '#FFFFFF',
+    zIndex: 12,
   },
 });

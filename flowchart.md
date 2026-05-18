@@ -5,41 +5,51 @@ This document details the user journey and navigation logic of the Semi applicat
 ## 1. Application Entry Flow
 
 ```mermaid
-graph TD
-    Start((App Start)) --> Hydration{State Loaded?}
-    Hydration -- No --> Loading[Loading Screen]
-    Hydration -- Yes --> HasPin{PIN Set?}
-    
-    HasPin -- No --> Dashboard[Dashboard Screen]
-    HasPin -- Yes --> Lock[Lock Screen]
-    
-    Lock --> Auth{Authenticated?}
-    Auth -- Biometric/PIN --> Dashboard
-    Auth -- Fails --> Lock
+mindmap
+  root((Semi App))
+    Auth
+      Get Started
+      Create PIN
+      Lock Screen
+    Main App
+      Dashboard
+        Salary Detail
+        Balance Reconciliation
+      Salary Plan
+        Add Salary
+        Add Extra Money
+        Budget Templates
+      Wallets
+        Transfer Money
+        Manage Wallets
+      Payables
+        Create Payable
+        Payable Detail
+        Pay Installment
+      Menu
+        History
+        Settings
+        About Semi
 ```
 
 ## 2. Core Navigation Structure
 
-The application uses a **Floating Navigation System** and a **Top Bar Menu** for primary navigation.
+The application uses a **3-Tab Bottom Navigation System** alongside a **Primary Action FAB** and a **Top Profile Menu**.
 
-### A. Persistent Floating Navigation (FAB + Bottom Bar)
+### Persistent Floating Navigation
 Located at the bottom of the screen on most major screens.
 
-| Element | Interaction | Target Screen |
+| Element | Target Tab/Screen | Purpose |
 | :--- | :--- | :--- |
-| **Home Icon** | Press | Dashboard |
-| **Budget Icon** | Press | Budget Template Screen |
-| **Wallets Icon** | Press | Wallets Management |
-| **FAB (+) Button** | Press | Add Salary Screen |
+| **Dashboard Icon** | Dashboard | Financial status overview (Am I okay?) |
+| **Wallets Icon** | Wallets Screen | Manage balances and Transfer (Where is my money?) |
+| **Payables Icon** | Payables Screen | Track debts and installments (What do I owe?) |
+| **FAB (+)** | Salary Plan Modal | Log income and allocate budget (Where should my salary go?) |
 
-### B. Top Bar Actions
-Located at the top of the screen.
-
-| Element | Interaction | Target Screen |
-| :--- | :--- | :--- |
-| **Menu Icon** (Left) | Press | Sidebar Menu (Overlays) |
-| **Profile Icon** (Right) | Press | Security Settings |
-| **"Semi" Title** | View | Branding indicator |
+### Top Bar Actions
+| Element | Interaction | Target Screen | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Profile Icon (Right)** | Press | Menu Screen | Access history and settings (What happened before?) |
 
 ---
 
@@ -52,17 +62,24 @@ The central hub for financial oversight.
 *   **"Manage" (Wallets)**: Press to go to **Wallets Management**.
 *   **Profile Button**: Press to go to **Security Settings**.
 
+### Salary Plan Hub
+The central hub for logging income and planning allocations.
+*   **New Salary**: Navigates to Add Salary Screen.
+*   **Extra Money**: Navigates to Add Extra Income Screen.
+*   **Budget Templates**: Opens allocation rules configuration.
+
 ### Add Salary Screen
-The entry point for new income.
+The entry point for new regular income.
 *   **Save Salary Button**: Validates input and redirects to **Salary Detail Screen**.
 
 ### Wallets Management
 *   **Add New Wallet Button**: Opens the creation form.
+*   **Transfer Money Button**: Navigates to Transfer Screen.
 *   **Wallet Cards**: Displays current balances.
 
-### Budget Template Screen
-*   **Amount Inputs**: Editable fields that save automatically on change.
-*   **Add Allocation**: Placeholder for future allocation logic.
+### Payables Screen
+*   **Create Payable**: Opens form to add new debt.
+*   **Payable Detail**: View schedules and log an installment.
 
 ### Security Settings
 *   **Reset Security PIN**: Clears current PIN and requires new setup.
@@ -92,13 +109,15 @@ flowchart LR
 | :--- | :--- | :--- |
 | **Dashboard** | Wallet Card | Wallets Screen |
 | **Dashboard** | Transaction Item | Salary Detail |
-| **Dashboard** | Profile Icon | Security Settings |
-| **Dashboard** | Nav Home | Dashboard (Refresh) |
-| **Dashboard** | Nav Budget | Budget Templates |
-| **Dashboard** | Nav Wallets | Wallets Screen |
-| **Dashboard** | FAB (+) | Add Salary |
-| **Add Salary** | Save Button | Salary Detail |
-| **Any** | Menu -> History | History Screen |
-| **Any** | Menu -> Settings | Security Settings |
-| **Lock Screen** | Use PIN | PIN Entry Mode |
+| **Dashboard** | Balance Reconciliation | Balance Reconciliation Screen |
+| **Nav (Bottom)** | Dashboard | Dashboard Screen |
+| **Nav (Bottom)** | Wallets | Wallets Screen |
+| **Nav (Bottom)** | Payables | Payables Screen |
+| **Top Bar** | Profile Icon | Menu Screen |
+| **Nav (FAB)** | (+) Button | Salary Plan Modal |
+| **Salary Plan** | Add Salary | Add Salary Screen |
+| **Salary Plan** | Budget Templates | Budget Templates |
+| **Wallets** | Transfer Money | Transfer Screen |
+| **Menu Screen** | History | History Screen |
+| **Menu Screen** | Settings | Security Settings |
 | **Security** | Reset PIN | Clear State / Lock |

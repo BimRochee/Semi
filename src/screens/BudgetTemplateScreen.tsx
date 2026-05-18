@@ -141,7 +141,7 @@ export function BudgetTemplateScreen() {
               }}
               style={[styles.segmentButton, activeCycle === cycle && styles.segmentButtonActive]}>
               <Text style={[styles.segmentLabel, activeCycle === cycle && styles.segmentLabelActive]}>
-                {cycle}
+                {cycle === '15th' ? '1st Half' : '2nd Half'}
               </Text>
             </Pressable>
           ))}
